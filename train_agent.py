@@ -35,10 +35,16 @@ def train_agent(restore_prior_from='data/Prior.ckpt',
     # Saved models are partially on the GPU, but if we dont have cuda enabled we can remap these
     # to the CPU.
     if torch.cuda.is_available():
-        Prior.rnn.load_state_dict(torch.load('data/Prior.ckpt'))
+        patch_state_dict = torch.load('data/Prior.ckpt')
+        for i in ['gru_1.bias_ih', 'gru_1.bias_hh', 'gru_2.bias_ih', 'gru_2.bias_hh', 'gru_3.bias_ih', 'gru_3.bias_hh']:
+            patch_state_dict[i] = patch_state_dict[i].squeeze()
+        Prior.rnn.load_state_dict(patch_state_dict)
         Agent.rnn.load_state_dict(torch.load(restore_agent_from))
     else:
-        Prior.rnn.load_state_dict(torch.load('data/Prior.ckpt', map_location=lambda storage, loc: storage))
+        patch_state_dict = torch.load('data/Prior.ckpt', map_location=lambda storage, loc: storage)
+        for i in ['gru_1.bias_ih', 'gru_1.bias_hh', 'gru_2.bias_ih', 'gru_2.bias_hh', 'gru_3.bias_ih', 'gru_3.bias_hh']:
+            patch_state_dict[i] = patch_state_dict[i].squeeze()
+        Prior.rnn.load_state_dict(patch_state_dict)
         Agent.rnn.load_state_dict(torch.load(restore_agent_from, map_location=lambda storage, loc: storage))
 
     # We dont need gradients with respect to Prior
@@ -53,7 +59,7 @@ def train_agent(restore_prior_from='data/Prior.ckpt',
 
     # For policy based RL, we normally train on-policy and correct for the fact that more likely actions
     # occur more often (which means the agent can get biased towards them). Using experience replay is
-    # therefor not as theoretically sound as it is for value based RL, but it seems to work well.
+    # therefore not as theoretically sound as it is for value based RL, but it seems to work well.
     experience = Experience(voc)
 
     # Log some network weights that can be dynamically plotted with the Vizard bokeh app
@@ -72,6 +78,9 @@ def train_agent(restore_prior_from='data/Prior.ckpt',
 
         # Sample from Agent
         seqs, agent_likelihood, entropy = Agent.sample(batch_size)
+
+        agent_likelihood.requires_grad = True #
+        entropy.requires_grad = True #
 
         # Remove duplicates, ie only consider unique seqs
         unique_idxs = unique(seqs)
